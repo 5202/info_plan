@@ -678,7 +678,7 @@ ladePlan();
     // Indikator einblenden
     indikator.style.opacity = progress;
     indikator.style.transform = `translateY(${currentY}px)`;
-    inhalt.style.transform = `translateY(${currentY * 0.4}px)`;
+    inhalt.style.transform = `translateY(${Math.min(currentY * 0.12, 20)}px)`;
 
     // Pfeil dreht sich wenn Schwellwert erreicht
     if (currentY >= THRESHOLD && !triggered) {
@@ -700,7 +700,7 @@ ladePlan();
       spinner.style.display = 'block';
       ptrText.textContent   = 'Wird aktualisiert…';
       indikator.style.transform = `translateY(${THRESHOLD}px)`;
-      inhalt.style.transform    = `translateY(${THRESHOLD * 0.4}px)`;
+      inhalt.style.transform    = `translateY(20px)`;
 
       ptrAktiv = true;
       cacheData = {};
