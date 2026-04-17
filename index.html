@@ -367,7 +367,7 @@ html, body {
 // ═══════════════════════════════════════════════════════════════
 //  KONFIGURATION  ← hier anpassen
 // ═══════════════════════════════════════════════════════════════
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbw-sYOkUn9oE2V14YHpmZUY8hlkvOZKVOJdhqfheTj0Wqc9dZacFPbgiYM3WYW8TDCN0A/exec";
+const WEB_APP_URL = "https://script.google.com/macros/library/d/1zv2Eg6_Pq1tbx-srCs0W1KpVyrnyPjKm7-Mn2zsMwrjAAKq0CmvCkAc7/7";
 // ═══════════════════════════════════════════════════════════════
 
 let aktuellerTab = 'heute';
@@ -487,13 +487,20 @@ async function ladePlan() {
 }
 
 // ── Laden-Anzeige ─────────────────────────────────────────────
+let ptrAktiv = false; // PTR unterdrückt den Plan-Spinner
+
 function zeigeLaden() {
+  document.getElementById('fehlerBanner').style.display = 'none';
+  if (ptrAktiv) {
+    // PTR zeigt eigenen Spinner – Plan-Bereich leer lassen
+    document.getElementById('plan').innerHTML = '';
+    return;
+  }
   document.getElementById('plan').innerHTML = `
     <div class="spinner-wrap">
       <div class="spinner"></div>
       <div>Wird geladen…</div>
     </div>`;
-  document.getElementById('fehlerBanner').style.display = 'none';
 }
 
 // ── Plan rendern ──────────────────────────────────────────────
@@ -695,6 +702,7 @@ ladePlan();
       indikator.style.transform = `translateY(${THRESHOLD}px)`;
       inhalt.style.transform    = `translateY(${THRESHOLD * 0.4}px)`;
 
+      ptrAktiv = true;
       cacheData = {};
       ladePlan().then(() => {
         // Reset
@@ -709,6 +717,7 @@ ladePlan();
           pfeil.style.display        = 'inline-block';
           spinner.style.display      = 'none';
           ptrText.textContent        = 'Zum Aktualisieren ziehen';
+          ptrAktiv = false;
         }, 350);
       });
     } else {
