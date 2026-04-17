@@ -373,7 +373,7 @@ const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbw-sYOkUn9oE2V14YHp
 let aktuellerTab = 'heute';
 let cacheData = {};  // In-memory cache
 const CACHE_VERSION = 'bios_plan_v1';
-const CACHE_TTL = 10 * 60 * 1000; // 10 Minuten
+const CACHE_TTL = 6 * 60 * 60 * 1000; // 6 Stunden
 
 function cacheSet(key, data) {
   cacheData[key] = data;
@@ -697,7 +697,7 @@ function refreshPlan() {
 }
 
 // Auto-Refresh alle 5 Minuten
-setInterval(() => { cacheClear(); ladePlan(true); }, 5 * 60 * 1000);
+setInterval(() => { cacheClear(); ladePlan(true); }, 6 * 60 * 60 * 1000);
 
 // ── Init ──────────────────────────────────────────────────────
 ladePlan();
