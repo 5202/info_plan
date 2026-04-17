@@ -695,12 +695,18 @@ ladePlan();
     pulling = false;
 
     if (currentY >= THRESHOLD) {
-      // Lade-Zustand
+      // Lade-Zustand – Inhalt bleibt an Ort, nur Indikator bleibt sichtbar
       pfeil.style.display   = 'none';
       spinner.style.display = 'block';
       ptrText.textContent   = 'Wird aktualisiert…';
-      indikator.style.transform = `translateY(${THRESHOLD}px)`;
-      inhalt.style.transform    = `translateY(20px)`;
+      inhalt.style.transition    = 'transform 0.25s ease';
+      indikator.style.transition = 'transform 0.25s ease';
+      indikator.style.transform  = `translateY(60px)`;
+      inhalt.style.transform     = 'translateY(0)';
+      setTimeout(() => {
+        inhalt.style.transition    = '';
+        indikator.style.transition = '';
+      }, 250);
 
       ptrAktiv = true;
       cacheData = {};
