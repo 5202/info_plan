@@ -371,7 +371,39 @@ const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbw-sYOkUn9oE2V14YHp
 // ═══════════════════════════════════════════════════════════════
 
 let aktuellerTab = 'heute';
-let cacheData = {};
+let cacheData = {};  // In-memory cache
+const CACHE_VERSION = 'bios_plan_v1';
+const CACHE_TTL = 10 * 60 * 1000; // 10 Minuten
+
+function cacheSet(key, data) {
+  cacheData[key] = data;
+  try {
+    localStorage.setItem(CACHE_VERSION + '_' + key, JSON.stringify({
+      data, ts: Date.now()
+    }));
+  } catch(e) {}
+}
+
+function cacheGet(key) {
+  if (cacheData[key]) return cacheData[key];
+  try {
+    const raw = localStorage.getItem(CACHE_VERSION + '_' + key);
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw);
+    if (Date.now() - ts > CACHE_TTL) return null; // abgelaufen
+    cacheData[key] = data;
+    return data;
+  } catch(e) { return null; }
+}
+
+function cacheClear() {
+  cacheData = {};
+  try {
+    Object.keys(localStorage)
+      .filter(k => k.startsWith(CACHE_VERSION))
+      .forEach(k => localStorage.removeItem(k));
+  } catch(e) {}
+}
 
 // ── Uhr ───────────────────────────────────────────────────────
 function updateUhr() {
@@ -451,23 +483,30 @@ function getBereich() {
 }
 
 // ── Plan laden ────────────────────────────────────────────────
-async function ladePlan() {
+async function ladePlan(stille = false) {
   const { von, bis } = getBereich();
   const cacheKey = `${von}_${bis}`;
 
-  zeigeLaden();
-
-  // Cache nutzen wenn vorhanden
-  if (cacheData[cacheKey]) {
-    renderPlan(cacheData[cacheKey]);
+  // Sofort aus Cache zeigen (stale-while-revalidate)
+  const cached = cacheGet(cacheKey);
+  if (cached) {
+    renderPlan(cached);
+    // Im Hintergrund still aktualisieren
+    fetchPlan(von, bis, cacheKey, true);
     return;
   }
 
+  // Kein Cache – Spinner zeigen und warten
+  if (!stille) zeigeLaden();
+  await fetchPlan(von, bis, cacheKey, stille);
+}
+
+async function fetchPlan(von, bis, cacheKey, stille) {
   if (!WEB_APP_URL.startsWith('https://script.google.com')) {
-    // Demo-Daten
     const demo = buildDemoData(von, bis);
-    cacheData[cacheKey] = demo;
+    cacheSet(cacheKey, demo);
     renderPlan(demo);
+    vorausladen();
     return;
   }
 
@@ -477,12 +516,30 @@ async function ladePlan() {
     const text = await resp.text();
     const data = JSON.parse(text);
     if (data.error) throw new Error(data.error);
-    cacheData[cacheKey] = data.tage || [];
-    renderPlan(data.tage || []);
+    const tage = data.tage || [];
+    cacheSet(cacheKey, tage);
+    renderPlan(tage);
+    vorausladen();
   } catch (err) {
     console.error('Plan Fehler:', err);
-    zeigeFehler('Arbeitsplan konnte nicht geladen werden: ' + err.message);
-    document.getElementById('plan').innerHTML = '';
+    if (!stille) {
+      zeigeFehler('Arbeitsplan konnte nicht geladen werden: ' + err.message);
+      document.getElementById('plan').innerHTML = '';
+    }
+  }
+}
+
+// Nächsten Tab im Hintergrund vorausladen
+function vorausladen() {
+  const reihenfolge = ['heute', 'woche', 'monat'];
+  const naechster = reihenfolge[(reihenfolge.indexOf(aktuellerTab) + 1) % 3];
+  const vorheriger = aktuellerTab;
+  aktuellerTab = naechster;
+  const { von, bis } = getBereich();
+  const key = `${von}_${bis}`;
+  aktuellerTab = vorheriger;
+  if (!cacheGet(key) && WEB_APP_URL.startsWith('https://script.google.com')) {
+    fetchPlan(von, bis, key, true).catch(() => {});
   }
 }
 
@@ -635,12 +692,12 @@ function refreshPlan() {
   btn.style.transform = 'rotate(360deg)';
   btn.style.transition = 'transform 0.5s ease';
   setTimeout(() => { btn.style.transform = ''; btn.style.transition = ''; }, 500);
-  cacheData = {};
+  cacheClear();
   ladePlan();
 }
 
 // Auto-Refresh alle 5 Minuten
-setInterval(() => { cacheData = {}; ladePlan(); }, 5 * 60 * 1000);
+setInterval(() => { cacheClear(); ladePlan(true); }, 5 * 60 * 1000);
 
 // ── Init ──────────────────────────────────────────────────────
 ladePlan();
