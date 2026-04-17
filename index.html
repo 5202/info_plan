@@ -59,9 +59,12 @@ html, body {
   top: var(--header-h);
   left: 0; right: 0;
   height: var(--tab-h);
-  background: var(--teal-dark);
+  background: #F1F5F9;
   display: flex;
-  border-top: 1px solid rgba(255,255,255,0.12);
+  align-items: center;
+  padding: 6px 12px;
+  gap: 8px;
+  border-bottom: 1px solid #E2E8F0;
   z-index: 19;
 }
 
@@ -70,18 +73,25 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
+  height: 34px;
   font-size: 14px;
   font-weight: 500;
-  color: rgba(255,255,255,0.55);
+  color: #64748B;
   cursor: pointer;
-  border-bottom: 3px solid transparent;
-  transition: color 0.15s, border-color 0.15s;
+  border-radius: 10px;
+  border: 1.5px solid transparent;
+  background: transparent;
+  transition: all 0.15s;
   user-select: none;
 }
 
+.tab:hover { background: #E2E8F0; color: #1E293B; }
+
 .tab.aktiv {
+  background: var(--teal-dark);
   color: #fff;
-  border-bottom-color: #4dc8e8;
+  border-color: var(--teal-dark);
+  font-weight: 600;
 }
 
 /* ── Inhalt ───────────────────────────────────────────────── */
@@ -571,6 +581,19 @@ function buildDemoData(von, bis) {
   }
   return tage;
 }
+
+// ── Refresh ───────────────────────────────────────────────────
+function refreshPlan() {
+  const btn = document.getElementById('refreshBtn');
+  btn.style.transform = 'rotate(360deg)';
+  btn.style.transition = 'transform 0.5s ease';
+  setTimeout(() => { btn.style.transform = ''; btn.style.transition = ''; }, 500);
+  cacheData = {};
+  ladePlan();
+}
+
+// Auto-Refresh alle 5 Minuten
+setInterval(() => { cacheData = {}; ladePlan(); }, 5 * 60 * 1000);
 
 // ── Init ──────────────────────────────────────────────────────
 ladePlan();
