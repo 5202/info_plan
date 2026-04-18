@@ -271,6 +271,8 @@ html, body {
 }
 .tag-karte.tag-leer { border-color: #E2E8F0; }
 
+.plan-container { width: 100%; }
+
 /* ── Leer-State ───────────────────────────────────────────── */
 .leer-state {
   text-align: center;
@@ -322,7 +324,9 @@ html, body {
 
 <div id="inhalt">
   <div id="fehlerBanner"></div>
-  <div id="plan"></div>
+  <div id="plan-heute" class="plan-container"></div>
+  <div id="plan-woche" class="plan-container" style="display:none"></div>
+  <div id="plan-monat" class="plan-container" style="display:none"></div>
 </div>
 
 <script>
@@ -334,7 +338,7 @@ const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbw-sYOkUn9oE2V14YHp
 
 let aktuellerTab = 'heute';
 let cacheData = {};  // In-memory cache
-const CACHE_VERSION = 'bios_plan_v1';
+const CACHE_VERSION = 'bios_plan_v2';
 const CACHE_TTL = 6 * 60 * 60 * 1000; // 6 Stunden
 
 function cacheSet(key, data) {
@@ -346,14 +350,15 @@ function cacheSet(key, data) {
   } catch(e) {}
 }
 
-function cacheGet(key) {
-  if (cacheData[key]) return cacheData[key];
+function cacheGet(key, mitAlter = false) {
+  if (cacheData[key] && !mitAlter) return cacheData[key];
   try {
     const raw = localStorage.getItem(CACHE_VERSION + '_' + key);
-    if (!raw) return null;
+    if (!raw) return mitAlter ? null : null;
     const { data, ts } = JSON.parse(raw);
     if (Date.now() - ts > CACHE_TTL) return null; // abgelaufen
     cacheData[key] = data;
+    if (mitAlter) return { data, alter: Date.now() - ts };
     return data;
   } catch(e) { return null; }
 }
@@ -427,7 +432,15 @@ function wechselTab(tab) {
   document.querySelectorAll('.tab').forEach((t, i) => {
     t.classList.toggle('aktiv', ['heute','woche','monat'][i] === tab);
   });
-  ladePlan();
+  // Container ein/ausblenden
+  ['heute','woche','monat'].forEach(t => {
+    document.getElementById('plan-' + t).style.display = t === tab ? 'block' : 'none';
+  });
+  // Nur laden wenn Container noch leer ist
+  const container = document.getElementById('plan-' + tab);
+  if (!container.dataset.geladen) {
+    ladePlan();
+  }
 }
 
 // ── Datumsbereich je Tab ──────────────────────────────────────
@@ -445,16 +458,23 @@ function getBereich() {
 }
 
 // ── Plan laden ────────────────────────────────────────────────
+const STALE_GRENZE = 60 * 60 * 1000; // 1 Stunde
+
 async function ladePlan(stille = false) {
   const { von, bis } = getBereich();
   const cacheKey = `${von}_${bis}`;
 
-  // Sofort aus Cache zeigen (stale-while-revalidate)
-  const cached = cacheGet(cacheKey);
-  if (cached) {
-    renderPlan(cached);
-    // Im Hintergrund still aktualisieren
-    fetchPlan(von, bis, cacheKey, true);
+  // Cache mit Alter prüfen
+  const cachedMitAlter = cacheGet(cacheKey, true);
+
+  if (cachedMitAlter) {
+    const { data, alter } = cachedMitAlter;
+    renderPlan(data);
+    if (alter > STALE_GRENZE) {
+      // Cache älter als 1h → im Hintergrund aktualisieren
+      fetchPlan(von, bis, cacheKey, true);
+    }
+    // Cache jünger als 1h → nichts tun, Daten sind frisch genug
     return;
   }
 
@@ -479,14 +499,22 @@ async function fetchPlan(von, bis, cacheKey, stille) {
     const data = JSON.parse(text);
     if (data.error) throw new Error(data.error);
     const tage = data.tage || [];
+
+    // Nur neu rendern wenn sich Daten geändert haben
+    const altesDaten = JSON.stringify(cacheGet(cacheKey) || []);
+    const neueDaten  = JSON.stringify(tage);
     cacheSet(cacheKey, tage);
-    renderPlan(tage);
+    if (neueDaten !== altesDaten || !stille) {
+      renderPlan(tage);
+    }
+
     vorausladen();
+    return tage;
   } catch (err) {
     console.error('Plan Fehler:', err);
     if (!stille) {
       zeigeFehler('Arbeitsplan konnte nicht geladen werden: ' + err.message);
-      document.getElementById('plan').innerHTML = '';
+      getPlanContainer().innerHTML = '';
     }
   }
 }
@@ -499,16 +527,25 @@ function vorausladen() {
   aktuellerTab = naechster;
   const { von, bis } = getBereich();
   const key = `${von}_${bis}`;
+  const container = document.getElementById('plan-' + naechster);
   aktuellerTab = vorheriger;
-  if (!cacheGet(key) && WEB_APP_URL.startsWith('https://script.google.com')) {
-    fetchPlan(von, bis, key, true).catch(() => {});
+  if (!container.dataset.geladen && WEB_APP_URL.startsWith('https://script.google.com')) {
+    const tab = naechster;
+    fetchPlan(von, bis, key, true).then(tage => {
+      if (tage && !container.dataset.geladen) {
+        const prev = aktuellerTab;
+        aktuellerTab = tab;
+        renderPlan(tage);
+        aktuellerTab = prev;
+      }
+    }).catch(() => {});
   }
 }
 
 // ── Laden-Anzeige ─────────────────────────────────────────────
 function zeigeLaden() {
   document.getElementById('fehlerBanner').style.display = 'none';
-  document.getElementById('plan').innerHTML = `
+  getPlanContainer().innerHTML = `
     <div class="spinner-wrap">
       <div class="spinner"></div>
       <div>Wird geladen…</div>
@@ -516,8 +553,12 @@ function zeigeLaden() {
 }
 
 // ── Plan rendern ──────────────────────────────────────────────
+function getPlanContainer() {
+  return document.getElementById('plan-' + aktuellerTab);
+}
+
 function renderPlan(tage) {
-  const plan = document.getElementById('plan');
+  const plan = getPlanContainer();
   const { von, bis } = getBereich();
 
   // Vollständige Tagesliste generieren (inkl. Sonntage/Feiertage)
@@ -541,6 +582,7 @@ function renderPlan(tage) {
   }
 
   plan.innerHTML = alleTage.map(tag => renderTag(tag)).join('');
+  plan.dataset.geladen = '1';
 }
 
 function renderTag(tag) {
